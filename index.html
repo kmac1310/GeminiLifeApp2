@@ -835,11 +835,10 @@
       height: 100%;
       background: rgba(0, 0, 0, 0.8);
       backdrop-filter: blur(5px);
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
       z-index: 1000;
-      display: none;
     }
 
     .modal-content {
@@ -848,9 +847,12 @@
       border-radius: 20px;
       padding: 40px;
       max-width: 600px;
+      width: 90%; /* Added for better mobile support */
       text-align: center;
       position: relative;
       animation: modal-fade-in 0.5s ease-out;
+      overflow-y: auto; /* Ensure content is scrollable if it exceeds modal height */
+      max-height: 90vh;
     }
 
     @keyframes modal-fade-in {
@@ -965,6 +967,7 @@
       }
       
       .day-grid {
+        /* Adjusted for a better fit on smaller screens */
         grid-template-columns: repeat(12, 1fr);
         grid-template-rows: repeat(2, 1fr);
       }
@@ -1324,6 +1327,20 @@
     </div>
   </div>
   
+  <!-- Custom Info Modal (Replaces alert()) -->
+  <div class="modal-overlay" id="infoModal">
+    <div class="modal-content">
+      <span class="modal-close" onclick="closeModal('infoModal')">×</span>
+      <div class="modal-header">1440TIME™ Notification</div>
+      <div class="modal-body">
+        <p id="infoModalText"></p>
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeModal('infoModal')">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Welcome Tour Modal -->
   <div class="modal-overlay" id="welcomeTour">
     <div class="modal-content">
@@ -1402,38 +1419,49 @@
     const settingsModal = document.getElementById('settingsModal');
     const tokenTerminologySelect = document.getElementById('tokenTerminology');
     const optionLowReturn = document.getElementById('optionLowReturn');
+    const infoModal = document.getElementById('infoModal');
+    const infoModalText = document.getElementById('infoModalText');
 
     // --- DATA PERSISTENCE ---
     const saveState = () => {
-      localStorage.setItem('1440time_entries', JSON.stringify(entries));
-      localStorage.setItem('1440time_age', ageInput.value);
-      localStorage.setItem('1440time_sleep', sleepInput.value);
-      localStorage.setItem('1440time_work', workInput.value);
-      localStorage.setItem('1440time_salary', salaryInput.value);
-      localStorage.setItem('1440time_today', today);
-      localStorage.setItem('1440time_token_terminology', tokenTerminology);
+      try {
+        localStorage.setItem('1440time_entries', JSON.stringify(entries));
+        localStorage.setItem('1440time_age', ageInput.value);
+        localStorage.setItem('1440time_sleep', sleepInput.value);
+        localStorage.setItem('1440time_work', workInput.value);
+        localStorage.setItem('1440time_salary', salaryInput.value);
+        localStorage.setItem('1440time_today', today);
+        localStorage.setItem('1440time_token_terminology', tokenTerminology);
+      } catch (e) {
+        console.error("Could not save to localStorage: ", e);
+      }
     };
 
     const loadState = () => {
-      const savedEntries = localStorage.getItem('1440time_entries');
-      if (savedEntries) {
-        entries = JSON.parse(savedEntries);
+      try {
+        const savedEntries = localStorage.getItem('1440time_entries');
+        if (savedEntries) {
+          entries = JSON.parse(savedEntries);
+        }
+        const savedToday = localStorage.getItem('1440time_today');
+        if (savedToday !== today) {
+          saveDailySummary();
+          entries = [];
+          localStorage.removeItem('1440time_entries');
+          localStorage.setItem('1440time_today', today);
+        }
+        ageInput.value = localStorage.getItem('1440time_age') || '0';
+        sleepInput.value = localStorage.getItem('1440time_sleep') || '0';
+        workInput.value = localStorage.getItem('1440time_work') || '0';
+        salaryInput.value = localStorage.getItem('1440time_salary') || '0';
+        tokenTerminology = localStorage.getItem('1440time_token_terminology') || 'low-return';
+      } catch (e) {
+        console.error("Could not load from localStorage: ", e);
       }
-      const savedToday = localStorage.getItem('1440time_today');
-      if (savedToday !== today) {
-        saveDailySummary();
-        entries = [];
-        localStorage.removeItem('1440time_entries');
-        localStorage.setItem('1440time_today', today);
-      }
-      ageInput.value = localStorage.getItem('1440time_age') || '0';
-      sleepInput.value = localStorage.getItem('1440time_sleep') || '0';
-      workInput.value = localStorage.getItem('1440time_work') || '0';
-      salaryInput.value = localStorage.getItem('1440time_salary') || '0';
-      tokenTerminology = localStorage.getItem('1440time_token_terminology') || 'low-return';
     };
     
     const saveDailySummary = () => {
+      try {
         const history = JSON.parse(localStorage.getItem('1440time_history')) || {};
         const lowReturnMinutes = entries.filter(e => e.type === 'low-return').reduce((sum, entry) => sum + entry.minutes, 0);
         const productiveMinutes = entries.filter(e => e.type === 'productive').reduce((sum, entry) => sum + entry.minutes, 0);
@@ -1451,6 +1479,9 @@
         const oldDate = localStorage.getItem('1440time_today') || today;
         history[oldDate] = summary;
         localStorage.setItem('1440time_history', JSON.stringify(history));
+      } catch (e) {
+        console.error("Could not save daily summary: ", e);
+      }
     };
 
     // --- MAIN LOGIC & UI UPDATES ---
@@ -1495,7 +1526,6 @@
       const work = parseFloat(workInput.value) || 0;
       
       if (sleep + work > 24) {
-        // Using a custom message instead of an alert
         const message = "Sleep and work hours cannot exceed 24 in total. Please adjust.";
         showInfoModal(message);
         return;
@@ -1715,21 +1745,14 @@
     
     // --- MODAL LOGIC ---
     function showInfoModal(message) {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <div class="modal-header">1440TIME™ Notification</div>
-                <div class="modal-body">
-                    <p>${message}</p>
-                </div>
-                <div class="modal-footer">
-                    <button onclick="this.closest('.modal-overlay').remove()">OK</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
+        const modal = document.getElementById('infoModal');
+        const modalText = document.getElementById('infoModalText');
+        modalText.textContent = message;
         modal.style.display = 'flex';
+    }
+    
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
     }
 
     window.showTour = function() {
@@ -1738,7 +1761,11 @@
 
     window.closeTour = function() {
         welcomeTourModal.style.display = 'none';
-        localStorage.setItem('1440time_tour_seen', 'true');
+        try {
+          localStorage.setItem('1440time_tour_seen', 'true');
+        } catch (e) {
+          console.error("Could not save tour seen status: ", e);
+        }
     };
     
     window.openSettings = function() {
@@ -1749,11 +1776,11 @@
     window.closeSettings = function() {
         tokenTerminology = tokenTerminologySelect.value;
         saveState();
-        updateTerminologyUI(); // Update UI immediately after closing settings
-        updateAllCalculations(); // Recalculate and update all UI
+        updateTerminologyUI();
+        updateAllCalculations();
         settingsModal.style.display = 'none';
     };
-
+    
     // --- EVENT HANDLERS ---
     
     window.setActivity = function(label, type) {
@@ -1833,7 +1860,11 @@
     };
     
     window.startNewDay = function() {
-      if (confirm("Are you sure you want to start a new day? This will save your current day's data to history and reset everything.")) {
+      showInfoModal("Are you sure you want to start a new day? This will save your current day's data to history and reset everything.");
+      const confirmationButton = document.querySelector('#infoModal button');
+      confirmationButton.textContent = 'Yes, Start New Day';
+      confirmationButton.onclick = () => {
+        closeModal('infoModal');
         saveDailySummary();
         entries = [];
         localStorage.removeItem('1440time_entries');
@@ -1842,7 +1873,7 @@
         
         renderEntries();
         updateAllCalculations();
-      }
+      };
     };
     
     window.toggleHistory = function() {
@@ -1853,8 +1884,16 @@
     };
     
     window.resetEverything = function() {
-      if (confirm("⚠️ WARNING: This will delete ALL data (entries, history, age, salary, etc.) permanently. Are you sure?")) {
-        localStorage.clear();
+      showInfoModal("⚠️ WARNING: This will delete ALL data (entries, history, age, salary, etc.) permanently. Are you sure?");
+      const confirmationButton = document.querySelector('#infoModal button');
+      confirmationButton.textContent = 'Yes, Reset Everything';
+      confirmationButton.onclick = () => {
+        closeModal('infoModal');
+        try {
+          localStorage.clear();
+        } catch (e) {
+          console.error("Could not clear localStorage: ", e);
+        }
         entries = [];
         
         ageInput.value = '0';
@@ -1864,8 +1903,8 @@
         
         renderEntries();
         updateAllCalculations();
-        alert("System reset complete. All data has been erased.");
-      }
+        showInfoModal("System reset complete. All data has been erased.");
+      };
     };
     
     window.makeCommitment = function() {
@@ -1891,17 +1930,21 @@
       salaryInput.addEventListener('input', updateAllCalculations);
       
       renderEntries();
-      updateTerminologyUI(); // Update UI with initial terminology
+      updateTerminologyUI();
       updateAllCalculations();
       updateRealTimeCountdown();
       
       setInterval(updateRealTimeCountdown, 60000); 
 
-      // Show the welcome tour if it hasn't been seen before
       const tourSeen = localStorage.getItem('1440time_tour_seen');
       if (!tourSeen) {
           showTour();
       }
+      
+      // Ensure modals are initially hidden
+      welcomeTourModal.style.display = 'none';
+      settingsModal.style.display = 'none';
+      infoModal.style.display = 'none';
     };
 
     document.addEventListener('DOMContentLoaded', initialize);
